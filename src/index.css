@@ -1,0 +1,151 @@
+@import "tailwindcss";
+
+/*
+ * Self-hosted, UNSUBSETTED fonts — this is load-bearing, not a preference.
+ *
+ * Google Fonts serves these families split into latin/latin-ext/cyrillic/
+ * greek subsets, none of which include the box-drawing block (U+2500-257F).
+ * DATAPULSE draws its results table and its wordmark out of those exact
+ * characters, so with the Google-hosted copies every ─ │ ┌ ┬ silently fell
+ * back to whatever monospace the OS supplies — a font with a different
+ * advance width. The result: rows made purely of box characters rendered
+ * narrower than rows of text, and the table's borders no longer lined up
+ * with its own columns.
+ *
+ * The complete faces below carry all 128 box-drawing glyphs at exactly the
+ * same 600/1000em advance as their digits and letters, so a border row and
+ * a data row of equal character count are guaranteed equal width. Both
+ * families share that 0.6em advance, which is why the wordmark (IBM Plex)
+ * and the table (JetBrains) stay consistent with each other too.
+ *
+ * Only the two faces actually used are shipped: JetBrains Mono 400 for
+ * everything, IBM Plex Mono 700 for the wordmark.
+ */
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("./assets/fonts/JetBrainsMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("./assets/fonts/IBMPlexMono-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme {
+  /* DATAPULSE design tokens — lifted from the original concept mockup */
+  --color-bg: #0e0a06;
+  --color-panel-2: #1c150d;
+  --color-border: #3a2d1c;
+  --color-text: #f2d9a8;
+  --color-muted: #8a7a5e;
+  --color-accent: #ffb020;
+  --color-accent-dim: #a97a2c;
+  --color-accent2: #57e6c7;
+
+  --font-display: "IBM Plex Mono", ui-monospace, monospace;
+  --font-body: "JetBrains Mono", ui-monospace, monospace;
+}
+
+/*
+ * Everything below lives in @layer base so it sits *below* Tailwind's
+ * utilities layer in the cascade. Unlayered CSS always wins over layered
+ * CSS regardless of selector specificity — without this wrapper, a plain
+ * `button { background: none }` here would silently beat every bg-*
+ * utility applied to a <button>, which is exactly the bug that shipped
+ * first (mode/scope toggle buttons rendered with no fill).
+ */
+@layer base {
+  html,
+  body {
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-body);
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  ::selection {
+    background: var(--color-accent);
+    color: var(--color-bg);
+  }
+
+  button {
+    font-family: inherit;
+    cursor: pointer;
+    background: none;
+  }
+
+  button:focus-visible,
+  [data-focusable]:focus-visible {
+    outline: 2px solid var(--color-accent2);
+    outline-offset: 2px;
+  }
+}
+
+/*
+ * Ambient landing-screen background: a quiet breathing glow layered over
+ * the 3D grid scene (see DataGridScene.tsx) so the screen has depth and
+ * motion even before/after the boot sequence plays, without competing
+ * with the foreground. A plain element (not a pseudo), pinned behind the
+ * content via isolate + -z-10 on the section (see Landing.tsx) rather than
+ * relying on paint-order accidents.
+ */
+.landing-glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(closest-side, rgb(255 176 32 / 9%), transparent 70%);
+  animation: landing-breathe 4.5s ease-in-out infinite alternate;
+}
+
+@keyframes landing-breathe {
+  from {
+    opacity: 0.55;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+
+/* Subtle scanline texture, used behind the landing screen */
+.scanlines::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    rgb(255 255 255 / 2.5%) 0px,
+    rgb(255 255 255 / 2.5%) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.animate-blink {
+  animation: blink 1s step-end infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
