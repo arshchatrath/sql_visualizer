@@ -9,11 +9,11 @@ import { isMuted } from './muteState'
 // asset files, nothing to fetch.
 
 interface Synths {
-  kill: Tone.MembraneSynth
-  killNoise: Tone.NoiseSynth
-  upgrade: Tone.Synth
-  spawn: Tone.Synth
-  blip: Tone.Synth
+  kill: any
+  killNoise: any
+  upgrade: any
+  spawn: any
+  blip: any
 }
 
 let synths: Synths | null = null
