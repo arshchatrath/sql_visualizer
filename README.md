@@ -1,89 +1,122 @@
 # DATAPULSE
 
-A terminal for talking to your data — a cinematic, real-execution SQL lab. Every query you build actually
-runs against a genuine SQLite database (via [sql.js](https://sql.js.org/), compiled to WebAssembly) directly
-in your browser tab. Nothing is mocked and nothing is saved: the database is re-seeded fresh every time you
-load the page, so it's a safe place to try CREATE/READ/UPDATE/DELETE — including schema changes like
-`CREATE TABLE` / `ALTER TABLE` / `DROP TABLE` — without any real consequences.
+A SQL playground where the queries actually run.
 
-## Running it locally
+<p align="center">
+  <img src="docs/delete.gif" width="920" alt="Building a DELETE with a WHERE clause, then watching the matching rows flash red, get struck through, and collapse out of the table while the remaining rows close up.">
+</p>
 
-You need [Node.js](https://nodejs.org/) 20+ installed. From this folder:
+<!-- Once it's deployed, drop the URL here:  **[Try it →](https://your-url)** -->
+
+Build a query with the blocks on the right, hit EXECUTE, and it runs against a real SQLite database — sql.js
+compiled to WebAssembly, living in your browser tab. No server, no mock data layer, no fake loading spinner.
+The row counts and the millisecond timings are whatever the engine actually reported.
+
+The database is seeded fresh on every page load and thrown away when you close the tab. That's the whole
+idea. You can `DROP TABLE customers` and find out exactly what happens, then refresh and have it back.
+
+## Watching the rows
+
+Most SQL tools hand you a result grid and leave the rest to your imagination. Here the rows a statement
+touches are the ones that move.
+
+Delete some rows and they flash, take a strike-through, and collapse out while the survivors close up over
+them. Update them and they glow amber while only the cells that genuinely changed scramble from noise into
+their new values. Insert one and it drops into place. The rows you *didn't* touch stay on screen throughout,
+so you can see where in the table the change actually landed.
+
+None of it is choreography over invented data. Before the statement runs, the rows matching its `WHERE`
+clause are snapshotted by `rowid`; afterwards the table is read back and the two are diffed. What animates is
+what the database did.
+
+## The workspace
+
+<img src="docs/workspace.png" alt="Three-panel workspace: execution trace and results on the left, live schema in the middle, query builder and generated SQL on the right.">
+
+Three panels. On the left, the execution trace and results. The trace is SQLite's own `EXPLAIN QUERY PLAN`
+output, run as a real query, so `> SCAN customers` means it really is doing a full scan. Underneath is a
+history of everything you've run this session, and clicking any entry loads it back into the builder.
+
+In the middle, the schema, read straight out of the running database with `sqlite_master` and
+`PRAGMA table_info`. It can't drift from reality because it isn't a copy of it. Add a column and it's there.
+Click any table name to start querying it.
+
+On the right, the builder. Pick a mode (CREATE / READ / UPDATE / DELETE) and a scope (TABLE / DATABASE), and
+the relevant blocks appear: WHERE, JOIN, GROUP BY, ORDER BY, SET, VALUES. The SQL underneath is generated
+from those blocks and the live schema, and it's the exact string that gets executed. Nothing is assembled by
+hand anywhere else in the codebase.
+
+### Joins
+
+<img src="docs/join.png" alt="A DATABASE-scope join between orders and customers, with a connector line drawn between the two tables in the schema panel and a two-stage query plan in the trace.">
+
+Switch to DATABASE scope on a READ and you can join two tables. The schema panel draws a line between them,
+positioned from the measured screen coordinates of the two rows rather than guessed. The trace picks up the
+second stage: `SEARCH customers USING INTEGER PRIMARY KEY`.
+
+DATABASE scope on the other three modes is DDL — build a table from scratch, add or rename a column, or drop
+a table entirely. Dropping asks for a confirmation first, which is the one place the app slows you down on
+purpose.
+
+## Running it
+
+Node 20 or newer.
 
 ```sh
 npm install
 npm run dev
 ```
 
-Then open the URL it prints (typically `http://localhost:5173`). That's it — everything else, including the
-database engine, runs entirely client-side; there's no backend to start.
-
-Other useful commands:
+Open the URL it prints, usually `http://localhost:5173`. There's no backend to start and nothing to
+configure. The sql.js WebAssembly binary is committed to the repo, so `npm install` is genuinely all of it.
 
 ```sh
-npm run build     # type-check + production build, output to dist/
-npm run preview   # serve the production build locally
-npm run lint       # oxlint
+npm run build     # type-check + production build into dist/
+npm run preview   # serve that build locally
+npm run lint      # oxlint
 ```
 
-## What it does
+## Deploying
 
-- **Landing** — a boot sequence and an ASCII wordmark (both computed at render time, never hand-typed),
-  then `$ ./start`.
-- **Workspace** — three panels:
-  - **left**: the real execution trace (SQLite's own `EXPLAIN QUERY PLAN`, run as an actual query and timed
-    with `performance.now()`) and the results, rendered as a box-drawn ASCII table with real column widths,
-    row count, and elapsed time; below that, a short history of everything you've run this session, click
-    any entry to restore it into the builder.
-  - **middle**: the live schema, introspected straight from the running database (`sqlite_master` +
-    `PRAGMA table_info`) — it can't drift from what's actually there, and updates immediately after any DDL.
-  - **right**: the query builder — a CRUD mode (CREATE/READ/UPDATE/DELETE) × scope (TABLE/DATABASE) toggle
-    composes the available blocks (WHERE, JOIN, GROUP BY, ORDER BY, SET, VALUES, or — at DATABASE scope for
-    CREATE/UPDATE/DELETE — CREATE TABLE / ALTER TABLE / DROP TABLE), and the generated SQL underneath, with
-    `EXECUTE` to run it for real.
-- **Database-scope READ** composes a real `JOIN` across two tables, with a measured connector line drawn
-  between them in the schema panel.
-- **Database-scope CREATE/UPDATE/DELETE** are schema DDL: build a new table from scratch, add or rename a
-  column on an existing one, or drop a table entirely (behind an explicit confirmation checkbox).
+`npm run build` gives you a static `dist/`. Point any host at it — Vercel, Netlify, Cloudflare Pages, GitHub
+Pages — with build command `npm run build` and publish directory `dist`.
 
-## Project structure
+Two things about hosting under a subpath (like `username.github.io/datapulse/`) are worth knowing, because
+both were real bugs before they were fixed:
+
+`vite.config.ts` sets `base: './'`. With Vite's default `base: '/'`, every script and stylesheet resolves
+against the domain root instead, 404s, and you get a blank page with nothing useful in the console. Relative
+URLs work from a subpath and a root domain alike, which is safe here because this is a single page with no
+client-side router.
+
+`public/sql-wasm.wasm` is fetched at runtime relative to that same base. Since that file *is* the database,
+getting the path wrong doesn't degrade gracefully — the app stops dead at "failed to start query engine".
+Both cases are verified against an actual subpath deployment.
+
+## Built with
+
+React 19, TypeScript, Vite, Tailwind v4, [sql.js](https://sql.js.org/), [Zustand](https://zustand-demo.pmnd.rs/)
+for state, [GSAP](https://gsap.com/) for the choreography, [Tone.js](https://tonejs.github.io/) for the sound
+effects, and [three.js](https://threejs.org/) for the grid on the landing screen. Tone and three are both
+behind dynamic imports so they stay out of the initial bundle.
+
+Fonts are self-hosted deliberately. The tables and the wordmark are drawn out of box-drawing characters
+(`─ │ ┌ ┬`), and the subsets Google Fonts serves don't include that Unicode block, so those glyphs used to
+fall back to a system font at a different width and the table borders drifted out of line with their own
+columns.
 
 ```
 src/
   lib/
-    db/       sql.js loading, seed data, live schema introspection, EXPLAIN QUERY PLAN parsing
-    query/    pure SQL generation from builder state + live schema (no SQL string ever hand-assembled elsewhere)
-    ascii/    the box-drawing table/wordmark renderers
-    trace/    shared timing constants so the trace animation and results fade-in stay in sync
-  state/      the single Zustand store — database engine + query builder
-  components/
-    landing/, transition/, workspace/   the three screens/phases of the app
+    db/          sql.js loading, seed data, schema introspection, EXPLAIN QUERY PLAN parsing, row snapshots
+    query/       SQL generation from builder state + live schema
+    ascii/       the box-drawing table and wordmark renderers
+    animation/   the scramble-text tween
+    sound/       Tone.js synths behind a dynamic import, plus the mute toggle
+  state/         one Zustand store: engine + builder
+  components/    landing/, transition/, workspace/
 ```
 
-## Notes
-
-- Nothing persists between page loads by design — refresh and you get a fresh seeded database. That's the
-  point: it's a safe sandbox for practicing destructive operations like `DROP TABLE`.
-  `public/sql-wasm.wasm` is the sql.js WebAssembly binary the app loads at runtime; it's committed to the
-  repo so `npm install` alone is enough to run it (no separate download step).
-
-## Deploying
-
-```bash
-npm run build     # emits dist/
-```
-
-`dist/` is a fully static bundle — there's no server, no database to provision, and no environment
-variables. Upload it to any static host (GitHub Pages, Netlify, Vercel, Cloudflare Pages), or point the
-host at this repo with build command `npm run build` and publish directory `dist`.
-
-Assets are emitted with a **relative** base (`base: './'` in `vite.config.ts`), so the app works both at a
-domain root and under a subpath like `username.github.io/<repo-name>/`. Two things depend on that and are
-easy to break:
-
-- Leaving the default `base: '/'` makes every script and stylesheet 404 under a subpath — a blank page with
-  nothing obvious in the console to explain it.
-- `public/sql-wasm.wasm` is fetched at runtime relative to that same base. Since that binary *is* the
-  database, a wrong path doesn't degrade gracefully — the app stops at "failed to start query engine".
-
-Both are verified against a real subpath deployment, not assumed.
+<p align="center">
+  <img src="docs/landing.png" width="720" alt="The landing screen: a boot sequence, an ASCII wordmark, and a 3D grid receding into fog.">
+</p>
