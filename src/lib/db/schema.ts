@@ -30,14 +30,17 @@ export function introspectSchema(db: Database): TableSchema[] {
   const tableNames = tablesResult[0].values.map((row) => String(row[0]))
 
   return tableNames.map((name) => {
+    // PRAGMA table_info returns one row per column, with these result columns:
+    //   0 cid | 1 name | 2 type | 3 notnull | 4 dflt_value | 5 pk
     const colsResult = db.exec(`PRAGMA table_info(${quoteIdent(name)})`)
     const columns: ColumnInfo[] =
       colsResult.length === 0
         ? []
-        : colsResult[0].values.map((row) => {
-            const [, colName, colType, , , pk] = row
-            return { name: String(colName), type: String(colType), primaryKey: Number(pk) > 0 }
-          })
+        : colsResult[0].values.map((row) => ({
+            name: String(row[1]),
+            type: String(row[2]),
+            primaryKey: Number(row[5]) > 0,
+          }))
     return { name, columns }
   })
 }

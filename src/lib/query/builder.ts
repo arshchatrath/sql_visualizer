@@ -107,8 +107,9 @@ function buildSelect(state: BuilderState, schema: TableSchema[]): GeneratedQuery
     }
   }
 
-  if (state.orderBy.length > 0) {
-    sql += `\nORDER BY ${state.orderBy.map((o) => `${o.column} ${o.direction}`).join(', ')}`
+  const sorts = state.orderBy.filter((o) => o.column)
+  if (sorts.length > 0) {
+    sql += `\nORDER BY ${sorts.map((o) => `${o.column} ${o.direction}`).join(', ')}`
     chain.push('ORDER BY')
   }
 
