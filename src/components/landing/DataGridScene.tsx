@@ -12,8 +12,8 @@ const DRIFT_SPEED = 0.0009 // grid-cells per ms, tuned to read as a slow, delibe
 /**
  * A slow, atmospheric 3D grid receding into fog behind the landing screen —
  * rows of data extending away into the dark, drifting at a steady pulse,
- * rendered literally rather than implied. A transparent WebGL canvas over the existing near-black
- * background, so the CSS glow layer still shows through underneath it.
+ * rendered literally rather than implied. A transparent WebGL canvas over the
+ * existing near-black background, so the CSS glow layer still shows through.
  *
  * Deliberately restrained: one muted grid plane, no particles, no bloom,
  * fog fading it to the same near-black as the page background so it reads
@@ -41,17 +41,6 @@ export function DataGridScene() {
     const scene = new THREE.Scene()
     scene.fog = new THREE.Fog(BG_HEX, 10, 30)
 
-    // What actually sells a floor grid as 3D isn't steepness of the down-tilt
-    // — it's camera height above the plane plus keeping the visible depth
-    // range well clear of the camera. An earlier attempt sat the camera
-    // almost on the grid plane with the grid's near edge crossing behind the
-    // camera; nearly the entire visible depth range then landed compressed
-    // into a sliver of screen space, so it read as flat horizontal bands no
-    // matter the tilt angle (confirmed by projecting sample grid points
-    // through the camera matrix — verify visually before re-tuning by feel).
-    // Sitting the camera well above the plane and aiming far down the
-    // recession spreads that range across the frame: wide and off-screen
-    // near the bottom, converging toward a horizon well within the frustum.
     const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100)
     camera.position.set(0, 2.8, 4)
     camera.lookAt(0, -2.5, -22)
@@ -60,15 +49,6 @@ export function DataGridScene() {
     const gridMaterial = grid.material as THREE.LineBasicMaterial
     gridMaterial.transparent = true
     gridMaterial.opacity = GRID_OPACITY
-    // Each depth-direction ("column") line spans the grid's full local z
-    // extent in one draw call. If any part of that line sits behind the
-    // camera, it needs near-plane clipping — and that clipping silently
-    // dropped the whole line under swiftshader's line rasterizer (verified
-    // by isolating GL draw calls: the row lines, which never cross behind
-    // the camera, rendered correctly every frame, while every column line
-    // rendered nothing). Shifting the whole plane back so its nearest edge
-    // stays safely in front of the camera sidesteps the clipping path
-    // entirely instead of depending on it working.
     grid.position.set(0, -1.2, -22)
     scene.add(grid)
 
@@ -98,9 +78,6 @@ export function DataGridScene() {
 
     const renderFrame = (time: number) => {
       if (isPageVisible) {
-        // Cycle the grid forward by exactly one cell width so the loop
-        // seam is invisible — reads as an endless plane sliding past,
-        // not a bounded tile repeating.
         grid.position.z = baseZ + ((time * DRIFT_SPEED) % cellSize)
         renderer.render(scene, camera)
       }

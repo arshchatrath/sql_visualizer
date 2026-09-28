@@ -40,10 +40,10 @@ export function GeneratedSql() {
   const tokens = tokenizeSql(sql)
 
   return (
-    <div className="flex h-full flex-col gap-2" data-testid="generated-sql">
+    <div className="flex h-full flex-col gap-2">
       <div className="flex items-center justify-between text-xs">
         <span className="tracking-wide text-muted">generated query</span>
-        <span data-testid="sql-status" className={STATUS_CLASS[status]}>
+        <span className={STATUS_CLASS[status]}>
           {STATUS_LABEL[status]}
         </span>
       </div>

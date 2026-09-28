@@ -1,10 +1,6 @@
 import { useDbStore } from '../../../../state/store'
+import { availableColumns } from '../../../../lib/query/columns'
 import { suggestJoinColumns } from '../../../../lib/query/join'
-import type { TableSchema } from '../../../../lib/db/schema'
-
-function columnOptionsFor(table: TableSchema) {
-  return table.columns.map((c) => ({ value: `${table.name}.${c.name}`, label: `${table.name}.${c.name}` }))
-}
 
 export function JoinBlock() {
   const builder = useDbStore((s) => s.builder)
@@ -13,8 +9,7 @@ export function JoinBlock() {
   const setJoinColumns = useDbStore((s) => s.setJoinColumns)
 
   const otherTables = schema.filter((t) => t.name !== builder.table)
-  const primarySchema = schema.find((t) => t.name === builder.table)
-  const joinedSchema = schema.find((t) => t.name === builder.join.table)
+  const columns = availableColumns(builder, schema)
 
   function handlePickTable(tableName: string) {
     if (!tableName) {
@@ -28,10 +23,8 @@ export function JoinBlock() {
     }
   }
 
-  const columnOptions = primarySchema && joinedSchema ? [...columnOptionsFor(primarySchema), ...columnOptionsFor(joinedSchema)] : []
-
   return (
-    <div className="space-y-2" data-testid="join-block">
+    <div className="space-y-2">
       <span className="text-xs tracking-wide text-accent">JOIN</span>
       <div className="flex flex-wrap items-center gap-1.5">
         <select
@@ -48,7 +41,7 @@ export function JoinBlock() {
           ))}
         </select>
 
-        {builder.join.table && columnOptions.length > 0 && (
+        {builder.join.table && (
           <>
             <span className="text-xs text-muted">ON</span>
             <select
@@ -60,9 +53,9 @@ export function JoinBlock() {
               <option value="" disabled>
                 column…
               </option>
-              {columnOptions.map((c) => (
-                <option key={c.value} value={c.value}>
-                  {c.label}
+              {columns.map((c) => (
+                <option key={c} value={c}>
+                  {c}
                 </option>
               ))}
             </select>
@@ -76,9 +69,9 @@ export function JoinBlock() {
               <option value="" disabled>
                 column…
               </option>
-              {columnOptions.map((c) => (
-                <option key={c.value} value={c.value}>
-                  {c.label}
+              {columns.map((c) => (
+                <option key={c} value={c}>
+                  {c}
                 </option>
               ))}
             </select>

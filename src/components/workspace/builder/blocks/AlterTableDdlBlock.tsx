@@ -1,7 +1,5 @@
 import { useDbStore } from '../../../../state/store'
-import type { AlterAction, SqlColumnType } from '../../../../lib/query/types'
-
-const COLUMN_TYPES: SqlColumnType[] = ['INTEGER', 'TEXT', 'REAL']
+import { ALTER_ACTIONS, SQL_COLUMN_TYPES, type SqlColumnType } from '../../../../lib/query/types'
 
 export function AlterTableDdlBlock() {
   const builder = useDbStore((s) => s.builder)
@@ -13,47 +11,45 @@ export function AlterTableDdlBlock() {
   const table = schema.find((t) => t.name === builder.table)
   if (!table) return null
 
+  const { alterAction, alterAddColumn, alterRenameColumn } = builder
+
   return (
-    <div className="space-y-3" data-testid="alter-table-ddl-block">
-      <span className="text-xs tracking-wide text-accent">ALTER TABLE {builder.table}</span>
+    <div className="space-y-3">
+      <span className="text-xs tracking-wide text-accent">ALTER TABLE {table.name}</span>
 
       <div className="flex gap-1 text-xs">
-        {(['add-column', 'rename-column'] as AlterAction[]).map((action) => (
+        {ALTER_ACTIONS.map((action) => (
           <button
             key={action}
             type="button"
             onClick={() => setAlterAction(action)}
             data-focusable
-            aria-pressed={builder.alterAction === action}
+            aria-pressed={alterAction === action}
             className={`border px-2 py-1 tracking-wide transition-colors ${
-              builder.alterAction === action
-                ? 'border-accent2 bg-accent2 text-bg'
-                : 'border-border text-muted hover:text-text'
+              alterAction === action ? 'border-accent2 bg-accent2 text-bg' : 'border-border text-muted hover:text-text'
             }`}
           >
-            {action === 'add-column' ? 'ADD COLUMN' : 'RENAME COLUMN'}
+            {action}
           </button>
         ))}
       </div>
 
-      {builder.alterAction === 'add-column' ? (
+      {alterAction === 'ADD COLUMN' ? (
         <div className="flex flex-wrap items-center gap-1.5">
           <input
-            value={builder.alterAddColumn.name}
-            onChange={(e) => setAlterAddColumn({ ...builder.alterAddColumn, name: e.target.value })}
+            value={alterAddColumn.name}
+            onChange={(e) => setAlterAddColumn({ ...alterAddColumn, name: e.target.value })}
             placeholder="new column name"
             data-focusable
             className="w-36 border border-border bg-panel-2 px-1.5 py-1 text-xs text-text placeholder:text-muted/60"
           />
           <select
-            value={builder.alterAddColumn.type}
-            onChange={(e) =>
-              setAlterAddColumn({ ...builder.alterAddColumn, type: e.target.value as SqlColumnType })
-            }
+            value={alterAddColumn.type}
+            onChange={(e) => setAlterAddColumn({ ...alterAddColumn, type: e.target.value as SqlColumnType })}
             data-focusable
             className="border border-border bg-panel-2 px-1.5 py-1 text-xs text-accent2"
           >
-            {COLUMN_TYPES.map((t) => (
+            {SQL_COLUMN_TYPES.map((t) => (
               <option key={t} value={t}>
                 {t}
               </option>
@@ -63,8 +59,8 @@ export function AlterTableDdlBlock() {
       ) : (
         <div className="flex flex-wrap items-center gap-1.5">
           <select
-            value={builder.alterRenameColumn.from}
-            onChange={(e) => setAlterRenameColumn({ ...builder.alterRenameColumn, from: e.target.value })}
+            value={alterRenameColumn.from}
+            onChange={(e) => setAlterRenameColumn({ ...alterRenameColumn, from: e.target.value })}
             data-focusable
             className="border border-border bg-panel-2 px-1.5 py-1 text-xs text-text"
           >
@@ -77,8 +73,8 @@ export function AlterTableDdlBlock() {
           </select>
           <span className="text-xs text-muted">→</span>
           <input
-            value={builder.alterRenameColumn.to}
-            onChange={(e) => setAlterRenameColumn({ ...builder.alterRenameColumn, to: e.target.value })}
+            value={alterRenameColumn.to}
+            onChange={(e) => setAlterRenameColumn({ ...alterRenameColumn, to: e.target.value })}
             placeholder="new name"
             data-focusable
             className="w-32 border border-border bg-panel-2 px-1.5 py-1 text-xs text-text placeholder:text-muted/60"

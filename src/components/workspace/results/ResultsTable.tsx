@@ -1,11 +1,10 @@
 import { useDbStore } from '../../../state/store'
-import { RowAnimatedTable, type DisplayRow, type RowKind } from './RowAnimatedTable'
+import { RowAnimatedTable } from './RowAnimatedTable'
 
 /**
- * Resolves the last execution to a single (kind, columns, rows) shape
- * regardless of whether it was a SELECT (outcome.result) or a TABLE-scope
- * mutation (lastRowChanges) — then hands off to RowAnimatedTable, remounted
- * per execution so its animation always starts clean.
+ * Hands the last execution's rows to RowAnimatedTable — a TABLE-scope
+ * mutation's captured before/after rows, or a SELECT's result set —
+ * remounted per execution so its animation always starts clean.
  */
 export function ResultsTable() {
   const outcome = useDbStore((s) => s.lastOutcome)
@@ -13,27 +12,24 @@ export function ResultsTable() {
   const executionId = useDbStore((s) => s.lastExecutionId)
   const traceStageCount = useDbStore((s) => s.lastTrace.length)
 
-  let kind: RowKind | null = null
-  let columns: string[] = []
-  let rows: DisplayRow[] = []
-
   if (rowChanges) {
-    kind = rowChanges.kind
-    columns = rowChanges.columns
-    rows = rowChanges.rows.map((r) => ({
-      key: r.rowid,
-      before: r.before,
-      after: r.after,
-      affected: r.affected,
-    }))
-  } else if (outcome && !outcome.error && outcome.kind === 'rows' && outcome.result) {
-    kind = 'select'
-    columns = outcome.result.columns
-    // Every row a SELECT returns is the result itself — none of it is context.
-    rows = outcome.result.rows.map((r, i) => ({ key: i, before: null, after: r, affected: true }))
+    return <RowAnimatedTable key={executionId} {...rowChanges} traceStageCount={traceStageCount} />
   }
 
-  if (!kind) return null
+  if (outcome?.result) {
+    // Every row a SELECT returns is the result itself — none of it is context.
+    // It has no rowid, so its index stands in as the row's key.
+    const rows = outcome.result.rows.map((after, i) => ({ rowid: i, before: null, after, affected: true }))
+    return (
+      <RowAnimatedTable
+        key={executionId}
+        kind="select"
+        columns={outcome.result.columns}
+        rows={rows}
+        traceStageCount={traceStageCount}
+      />
+    )
+  }
 
-  return <RowAnimatedTable key={executionId} kind={kind} columns={columns} rows={rows} traceStageCount={traceStageCount} />
+  return null
 }

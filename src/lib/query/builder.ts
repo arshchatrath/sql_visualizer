@@ -10,32 +10,20 @@ export interface GeneratedQuery {
 const EMPTY_QUERY: GeneratedQuery = { sql: '', chain: [] }
 
 function resolveColumnType(schema: TableSchema[], primaryTable: string, columnRef: string): string | null {
-  let tableName = primaryTable
-  let colName = columnRef
-  if (columnRef.includes('.')) {
-    const [t, c] = columnRef.split('.')
-    tableName = t
-    colName = c
-  }
+  const [tableName, colName] = columnRef.includes('.') ? columnRef.split('.') : [primaryTable, columnRef]
   const table = schema.find((t) => t.name === tableName)
   return table?.columns.find((c) => c.name === colName)?.type ?? null
 }
 
-function isNumericType(type: string | null): boolean | null {
-  if (!type) return null
-  return /INT|REAL|FLOA|DOUB|NUM/i.test(type)
-}
-
 function formatLiteral(value: string, columnType: string | null, operator?: ComparisonOperator): string {
   const trimmed = value.trim()
-  if (operator === 'LIKE') return `'${trimmed.replace(/'/g, "''")}'`
-
-  const numeric = isNumericType(columnType)
-  if (numeric === true) return trimmed
-  if (numeric === false) return `'${trimmed.replace(/'/g, "''")}'`
-  // Unknown column type (shouldn't normally happen): best-effort guess.
-  if (trimmed !== '' && !Number.isNaN(Number(trimmed))) return trimmed
-  return `'${trimmed.replace(/'/g, "''")}'`
+  const quoted = `'${trimmed.replace(/'/g, "''")}'`
+  if (operator === 'LIKE') return quoted
+  // Unknown column type (shouldn't normally happen): guess from the value itself.
+  const numeric = columnType
+    ? /INT|REAL|FLOA|DOUB|NUM/i.test(columnType)
+    : trimmed !== '' && !Number.isNaN(Number(trimmed))
+  return numeric ? trimmed : quoted
 }
 
 /**
@@ -187,22 +175,17 @@ function buildCreateTableDdl(state: BuilderState): GeneratedQuery {
 
 function buildAlterTableDdl(state: BuilderState): GeneratedQuery {
   if (!state.table) return EMPTY_QUERY
+  const chain = ['ALTER TABLE', state.alterAction]
 
-  if (state.alterAction === 'add-column') {
+  if (state.alterAction === 'ADD COLUMN') {
     const { name, type } = state.alterAddColumn
-    if (!name.trim()) return { sql: '', chain: ['ALTER TABLE', 'ADD COLUMN'] }
-    return {
-      sql: `ALTER TABLE ${state.table}\nADD COLUMN ${name.trim()} ${type};`,
-      chain: ['ALTER TABLE', 'ADD COLUMN'],
-    }
+    if (!name.trim()) return { sql: '', chain }
+    return { sql: `ALTER TABLE ${state.table}\nADD COLUMN ${name.trim()} ${type};`, chain }
   }
 
   const { from, to } = state.alterRenameColumn
-  if (!from || !to.trim()) return { sql: '', chain: ['ALTER TABLE', 'RENAME COLUMN'] }
-  return {
-    sql: `ALTER TABLE ${state.table}\nRENAME COLUMN ${from} TO ${to.trim()};`,
-    chain: ['ALTER TABLE', 'RENAME COLUMN'],
-  }
+  if (!from || !to.trim()) return { sql: '', chain }
+  return { sql: `ALTER TABLE ${state.table}\nRENAME COLUMN ${from} TO ${to.trim()};`, chain }
 }
 
 function buildDropTableDdl(state: BuilderState): GeneratedQuery {
@@ -215,7 +198,7 @@ export function generateQuery(state: BuilderState, schema: TableSchema[]): Gener
   if (state.scope === 'DATABASE') {
     switch (state.mode) {
       case 'READ':
-        return state.table ? buildSelect(state, schema) : EMPTY_QUERY
+        return buildSelect(state, schema)
       case 'CREATE':
         return buildCreateTableDdl(state)
       case 'UPDATE':
@@ -225,7 +208,6 @@ export function generateQuery(state: BuilderState, schema: TableSchema[]): Gener
     }
   }
 
-  if (!state.table) return EMPTY_QUERY
   switch (state.mode) {
     case 'CREATE':
       return buildInsert(state, schema)

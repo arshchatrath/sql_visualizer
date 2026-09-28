@@ -1,7 +1,5 @@
 import { useDbStore } from '../../../../state/store'
-import type { SqlColumnType } from '../../../../lib/query/types'
-
-const COLUMN_TYPES: SqlColumnType[] = ['INTEGER', 'TEXT', 'REAL']
+import { SQL_COLUMN_TYPES, type SqlColumnType } from '../../../../lib/query/types'
 
 export function CreateTableDdlBlock() {
   const builder = useDbStore((s) => s.builder)
@@ -11,7 +9,7 @@ export function CreateTableDdlBlock() {
   const removeNewTableColumn = useDbStore((s) => s.removeNewTableColumn)
 
   return (
-    <div className="space-y-3" data-testid="create-table-ddl-block">
+    <div className="space-y-3">
       <span className="text-xs tracking-wide text-accent">CREATE TABLE</span>
 
       <label className="flex flex-col gap-1 text-xs text-muted">
@@ -44,7 +42,7 @@ export function CreateTableDdlBlock() {
               data-focusable
               className="border border-border bg-panel-2 px-1.5 py-1 text-xs text-accent2"
             >
-              {COLUMN_TYPES.map((t) => (
+              {SQL_COLUMN_TYPES.map((t) => (
                 <option key={t} value={t}>
                   {t}
                 </option>

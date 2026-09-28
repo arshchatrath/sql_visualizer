@@ -36,10 +36,7 @@ export function WorkspaceLayout() {
 
   if (status === 'loading') {
     return (
-      <div
-        data-testid="engine-loading"
-        className="flex min-h-screen items-center justify-center bg-bg font-body text-sm text-muted"
-      >
+      <div className="flex min-h-screen items-center justify-center bg-bg font-body text-sm text-muted">
         mounting query engine ...
       </div>
     )
@@ -54,10 +51,7 @@ export function WorkspaceLayout() {
   }
 
   return (
-    <div
-      data-testid="workspace"
-      className="grid min-h-screen gap-0 bg-bg text-text lg:h-screen lg:grid-cols-[1.05fr_200px_1fr]"
-    >
+    <div className="grid min-h-screen gap-0 bg-bg text-text lg:h-screen lg:grid-cols-[1.05fr_200px_1fr]">
       <div className="grid min-h-0 lg:grid-rows-[minmax(0,1.3fr)_minmax(0,1fr)]">
         <Panel title="root@datapulse:~$" tag="exec_log" right={<SoundToggle />}>
           <div className="flex h-full flex-col gap-4">

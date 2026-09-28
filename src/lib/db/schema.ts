@@ -3,7 +3,6 @@ import type { Database } from 'sql.js'
 export interface ColumnInfo {
   name: string
   type: string
-  notNull: boolean
   primaryKey: boolean
 }
 
@@ -36,13 +35,8 @@ export function introspectSchema(db: Database): TableSchema[] {
       colsResult.length === 0
         ? []
         : colsResult[0].values.map((row) => {
-            const [, colName, colType, notNull, , pk] = row
-            return {
-              name: String(colName),
-              type: String(colType),
-              notNull: Number(notNull) === 1,
-              primaryKey: Number(pk) > 0,
-            }
+            const [, colName, colType, , , pk] = row
+            return { name: String(colName), type: String(colType), primaryKey: Number(pk) > 0 }
           })
     return { name, columns }
   })

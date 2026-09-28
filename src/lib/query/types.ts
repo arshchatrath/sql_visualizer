@@ -32,7 +32,8 @@ export interface JoinSpec {
   rightColumn: string | null
 }
 
-export type SqlColumnType = 'INTEGER' | 'TEXT' | 'REAL'
+export const SQL_COLUMN_TYPES = ['INTEGER', 'TEXT', 'REAL'] as const
+export type SqlColumnType = (typeof SQL_COLUMN_TYPES)[number]
 
 export interface DdlColumnDef {
   id: string
@@ -42,7 +43,9 @@ export interface DdlColumnDef {
   notNull: boolean
 }
 
-export type AlterAction = 'add-column' | 'rename-column'
+/** Doubles as the SQL keyword and the button label. */
+export const ALTER_ACTIONS = ['ADD COLUMN', 'RENAME COLUMN'] as const
+export type AlterAction = (typeof ALTER_ACTIONS)[number]
 
 export interface BuilderState {
   mode: CrudMode
@@ -83,17 +86,16 @@ export function createDefaultBuilderState(): BuilderState {
     insertValues: {},
     newTableName: '',
     newTableColumns: [],
-    alterAction: 'add-column',
+    alterAction: 'ADD COLUMN',
     alterAddColumn: { name: '', type: 'TEXT' },
     alterRenameColumn: { from: '', to: '' },
     dropConfirmed: false,
   }
 }
 
-let nextId = 1
+let nextId = 0
 export function nextClauseId(prefix: string): string {
-  nextId += 1
-  return `${prefix}-${nextId}`
+  return `${prefix}-${++nextId}`
 }
 
 export interface HistoryEntry {

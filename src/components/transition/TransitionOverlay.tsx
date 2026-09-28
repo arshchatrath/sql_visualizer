@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import gsap from 'gsap'
 
 interface TransitionOverlayProps {
@@ -6,8 +6,6 @@ interface TransitionOverlayProps {
   playToken: number
   /** Fired the instant the overlay reaches full coverage — swap content here. */
   onMidpoint: () => void
-  /** Fired once the overlay has fully cleared again. */
-  onComplete: () => void
 }
 
 const TARGET_CELL_PX = 64
@@ -19,36 +17,20 @@ const MAX_ROWS = 24
 function computeGrid() {
   const cols = Math.min(MAX_COLS, Math.max(MIN_COLS, Math.round(window.innerWidth / TARGET_CELL_PX)))
   const rows = Math.min(MAX_ROWS, Math.max(MIN_ROWS, Math.round(window.innerHeight / TARGET_CELL_PX)))
-  return { cols, rows }
-}
-
-// A sparse, deterministic scatter of the cyan accent among the amber cells —
-// two different-period patterns OR'd together so it reads as scattered
-// rather than a mechanically regular diagonal (a single modulo would tile
-// visibly). Deterministic (not Math.random()) so the grid doesn't reshuffle
-// on every re-render.
-function computeCellIsCyan(cols: number, rows: number) {
-  const flags: boolean[] = []
-  for (let i = 0; i < cols * rows; i++) {
+  // A sparse, deterministic scatter of the cyan accent among the amber cells —
+  // two different-period patterns OR'd together so it reads as scattered
+  // rather than a mechanically regular diagonal (a single modulo would tile
+  // visibly).
+  const cellIsCyan = Array.from({ length: cols * rows }, (_, i) => {
     const row = Math.floor(i / cols)
     const col = i % cols
-    flags.push((row * 7 + col * 13) % 23 === 0 || (row * 3 + col * 19) % 41 === 0)
-  }
-  return flags
+    return (row * 7 + col * 13) % 23 === 0 || (row * 3 + col * 19) % 41 === 0
+  })
+  return { cols, rows, cellIsCyan }
 }
 
-/**
- * Full-screen cinematic wipe that swaps the landing screen for the
- * workspace: a glitch-snap bookends a mosaic of cells that assembles itself
- * from the center outward in 3D (perspective + rotateX, not a flat scale),
- * a bright flash sells the cut to the workspace underneath, a short status
- * beat holds, then the mosaic irises back open from the center to reveal
- * it. Orchestrated entirely with one GSAP timeline so the whole sequence's
- * pacing lives in one place.
- */
-export function TransitionOverlay({ playToken, onMidpoint, onComplete }: TransitionOverlayProps) {
-  const [{ cols, rows }] = useState(computeGrid)
-  const cellIsCyan = useMemo(() => computeCellIsCyan(cols, rows), [cols, rows])
+export function TransitionOverlay({ playToken, onMidpoint }: TransitionOverlayProps) {
+  const [{ cols, rows, cellIsCyan }] = useState(computeGrid)
   const cellRefs = useRef<Array<HTMLDivElement | null>>([])
   const holdTextRef = useRef<HTMLSpanElement>(null)
   const shakeRef = useRef<HTMLDivElement>(null)
@@ -71,10 +53,6 @@ export function TransitionOverlay({ playToken, onMidpoint, onComplete }: Transit
     const flashInDuration = reducedMotion ? 0.01 : 0.08
     const flashOutDuration = reducedMotion ? 0.01 : 0.24
 
-    // A quick RGB-slice screen-tear: a couple of horizontal bars jump
-    // sideways, a noise band flickers, the whole overlay jitters — all as
-    // one simultaneous burst (each tween anchored to the previous one's
-    // start via "<") so it reads as a single glitch, not a sequence.
     const glitchBurst = (tl: gsap.core.Timeline) => {
       tl.to(shakeRef.current, { keyframes: { x: [0, 6, -5, 3, -2, 0] }, duration: glitchDuration, ease: 'steps(5)' })
       tl.to(
@@ -91,7 +69,7 @@ export function TransitionOverlay({ playToken, onMidpoint, onComplete }: Transit
     }
 
     const ctx = gsap.context(() => {
-      const tl = gsap.timeline({ onComplete })
+      const tl = gsap.timeline()
 
       glitchBurst(tl)
 
@@ -106,7 +84,7 @@ export function TransitionOverlay({ playToken, onMidpoint, onComplete }: Transit
       // Flash overlaps the tail of the assemble sweep so the cut to full
       // coverage lands on the brightest frame, then settles before the
       // status line reads.
-      tl.to(flashRef.current, { opacity: 1, duration: flashInDuration }, `-=${Math.min(sweepDuration * 0.2, sweepDuration)}`)
+      tl.to(flashRef.current, { opacity: 1, duration: flashInDuration }, `-=${sweepDuration * 0.2}`)
       tl.call(onMidpoint)
       tl.to(flashRef.current, { opacity: 0, duration: flashOutDuration })
       tl.to(holdTextRef.current, { opacity: 1, duration: textFade }, reducedMotion ? undefined : '-=0.05')

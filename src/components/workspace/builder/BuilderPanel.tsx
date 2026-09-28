@@ -43,7 +43,7 @@ export function BuilderPanel() {
   const ready = isNewTableDdl || Boolean(table)
 
   return (
-    <div className="flex h-full flex-col gap-4" data-testid="builder-panel">
+    <div className="flex h-full flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-2">
           <ModeToggle />

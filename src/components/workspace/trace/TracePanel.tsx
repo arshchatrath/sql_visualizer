@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import gsap from 'gsap'
 import { useDbStore } from '../../../state/store'
+import { summarizeOutcome } from '../../../lib/db/engine'
 import { TRACE_BASE_DELAY_MS, TRACE_STAGGER_MS } from '../../../lib/trace/timing'
 import { AsciiSpinner } from './AsciiSpinner'
 
@@ -56,7 +57,7 @@ export function TracePanel() {
   }
 
   return (
-    <div className="space-y-1 font-body text-xs leading-relaxed" data-testid="trace-panel">
+    <div className="space-y-1 font-body text-xs leading-relaxed">
       <div className="mb-2 text-muted">$ {lastSql.trim().split('\n')[0]}</div>
 
       {outcome.error ? (
@@ -73,12 +74,8 @@ export function TracePanel() {
       )}
 
       {!outcome.error && showSummary && (
-        <div className="mt-3 text-accent2" data-testid="trace-summary">
-          {outcome.kind === 'rows' &&
-            `-- ${outcome.result?.rows.length ?? 0} row(s) in ${outcome.elapsedMs.toFixed(2)}ms`}
-          {outcome.kind === 'rows-modified' &&
-            `-- ${outcome.rowsModified} row(s) affected in ${outcome.elapsedMs.toFixed(2)}ms`}
-          {outcome.kind === 'none' && `-- done in ${outcome.elapsedMs.toFixed(2)}ms`}
+        <div className="mt-3 text-accent2">
+          -- {summarizeOutcome(outcome)} in {outcome.elapsedMs.toFixed(2)}ms
         </div>
       )}
     </div>

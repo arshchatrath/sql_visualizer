@@ -1,6 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useDbStore } from '../../../state/store'
 import { loadSfx } from '../../../lib/sound/loadSfx'
+
+// Read the real platform rather than showing every user both spellings.
+const SHORTCUT_LABEL = /mac|iphone|ipad/i.test(navigator.userAgent) ? '⌘' : 'ctrl+'
 
 export function ExecuteButton() {
   const sql = useDbStore((s) => s.generatedSql)
@@ -11,12 +14,6 @@ export function ExecuteButton() {
 
   const isDropTable = scope === 'DATABASE' && mode === 'DELETE'
   const blocked = !sql || (isDropTable && !dropConfirmed)
-
-  // Read the real platform rather than showing every user both spellings.
-  const [shortcutLabel, setShortcutLabel] = useState('ctrl+')
-  useEffect(() => {
-    if (/mac|iphone|ipad/i.test(navigator.userAgent)) setShortcutLabel('⌘')
-  }, [])
 
   const handleClick = () => {
     // Kick off the (code-split) audio engine's load + AudioContext start
@@ -52,9 +49,7 @@ export function ExecuteButton() {
       >
         ▶ EXECUTE
       </button>
-      <span className="text-[10px] text-muted" data-testid="execute-hint">
-        {shortcutLabel}⏎
-      </span>
+      <span className="text-[10px] text-muted">{SHORTCUT_LABEL}⏎</span>
     </div>
   )
 }

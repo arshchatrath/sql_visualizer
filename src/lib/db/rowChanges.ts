@@ -19,7 +19,6 @@ export interface RowChangeRow {
 }
 
 export interface RowChangeSet {
-  table: string
   kind: 'insert' | 'update' | 'delete'
   columns: string[]
   rows: RowChangeRow[]
@@ -103,7 +102,6 @@ export function runStatementWithRowCapture(
     return {
       outcome,
       rowChanges: {
-        table: capture.table,
         kind: 'insert',
         columns,
         rows: remaining.rows.map((r) => ({
@@ -134,7 +132,6 @@ export function runStatementWithRowCapture(
     return {
       outcome,
       rowChanges: {
-        table: capture.table,
         kind: 'delete',
         columns,
         rows: [...doomed, ...survivors].sort((a, b) => a.rowid - b.rowid),
@@ -149,7 +146,6 @@ export function runStatementWithRowCapture(
   return {
     outcome,
     rowChanges: {
-      table: capture.table,
       kind: 'update',
       columns,
       rows: remaining.rows.map((r) => ({

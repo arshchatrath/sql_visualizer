@@ -110,7 +110,6 @@ src/
   lib/
     db/          sql.js loading, seed data, schema introspection, EXPLAIN QUERY PLAN parsing, row snapshots
     query/       SQL generation from builder state + live schema
-    ascii/       the box-drawing table and wordmark renderers
     animation/   the scramble-text tween
     sound/       Tone.js synths behind a dynamic import, plus the mute toggle
   state/         one Zustand store: engine + builder

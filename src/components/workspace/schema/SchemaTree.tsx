@@ -62,7 +62,7 @@ export function SchemaTree() {
   }
 
   return (
-    <div ref={containerRef} className="relative pr-8" data-testid="schema-tree">
+    <div ref={containerRef} className="relative pr-8">
       {schema.map((table) => {
         const isJoinParty = joinActive && (table.name === primaryTable || table.name === join.table)
         const isSelected = table.name === primaryTable
@@ -81,7 +81,6 @@ export function SchemaTree() {
               }}
               onClick={() => setTable(table.name)}
               data-focusable
-              data-testid={`schema-table-${table.name}`}
               aria-pressed={isSelected}
               title={`build a query against ${table.name}`}
               className={`inline-block cursor-pointer text-left text-sm transition-colors hover:underline ${
@@ -103,7 +102,7 @@ export function SchemaTree() {
       })}
 
       {connector && (
-        <svg className="pointer-events-none absolute inset-0 overflow-visible" data-testid="schema-join-line">
+        <svg className="pointer-events-none absolute inset-0 overflow-visible">
           <path d={connector.d} fill="none" stroke="var(--color-accent2)" strokeWidth="1.5" />
           <text
             x={connector.labelX}

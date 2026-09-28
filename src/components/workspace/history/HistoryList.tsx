@@ -19,7 +19,7 @@ export function HistoryList() {
   }
 
   return (
-    <ul className="space-y-1" data-testid="history-list">
+    <ul className="space-y-1">
       {history.map((entry) => (
         <li key={entry.id}>
           <button

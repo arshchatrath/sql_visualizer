@@ -1,36 +1,19 @@
 import initSqlJs, { type Database, type SqlJsStatic } from 'sql.js'
 
-let sqlJsPromise: Promise<SqlJsStatic> | null = null
-
 /**
- * Loads the sql.js WASM runtime once and caches the promise.
+ * Loads the sql.js WASM runtime.
  *
  * The path is resolved against Vite's configured base rather than hardcoded
  * to "/sql-wasm.wasm". Hosted below a domain root — GitHub Pages serves a
  * project at /<repo-name>/ — the rooted path 404s, and because this WASM *is*
  * the database, the whole app dies with "failed to start query engine" rather
- * than degrading. BASE_URL is "/" during local dev, so this is identical
- * there.
+ * than degrading. The requested filename is deliberately ignored: sql.js asks
+ * for its build-specific name (sql-wasm-browser.wasm), while the binary
+ * vendored into public/ is plain sql-wasm.wasm.
  */
 export function loadSqlJs(): Promise<SqlJsStatic> {
-  if (!sqlJsPromise) {
-    // The requested filename is deliberately ignored: sql.js asks for its
-    // build-specific name (sql-wasm-browser.wasm), while the binary vendored
-    // into public/ is plain sql-wasm.wasm. Only the location needs fixing.
-    const base = import.meta.env.BASE_URL
-    sqlJsPromise = initSqlJs({
-      locateFile: () => `${base}${base.endsWith('/') ? '' : '/'}sql-wasm.wasm`,
-    })
-  }
-  return sqlJsPromise
+  return initSqlJs({ locateFile: () => `${import.meta.env.BASE_URL}sql-wasm.wasm` })
 }
-
-export interface QueryResult {
-  columns: string[]
-  rows: unknown[][]
-}
-
-export type ExecOutcomeKind = 'rows' | 'rows-modified' | 'none'
 
 // SQLite's sqlite3_changes() (what db.getRowsModified() reads) only ever
 // reflects the most recently completed INSERT/UPDATE/DELETE — it is not
@@ -40,8 +23,8 @@ export type ExecOutcomeKind = 'rows' | 'rows-modified' | 'none'
 const DDL_STATEMENT = /^\s*(CREATE|ALTER|DROP)\b/i
 
 export interface ExecOutcome {
-  kind: ExecOutcomeKind
-  result: QueryResult | null
+  kind: 'rows' | 'rows-modified' | 'none'
+  result: { columns: string[]; rows: unknown[][] } | null
   rowsModified: number | null
   elapsedMs: number
   error: string | null
@@ -91,4 +74,12 @@ export function runStatement(db: Database, sql: string): ExecOutcome {
       error: err instanceof Error ? err.message : String(err),
     }
   }
+}
+
+/** "3 row(s)", "2 row(s) affected", "done" or "error" — shared by the trace, results and history panels. */
+export function summarizeOutcome(outcome: ExecOutcome): string {
+  if (outcome.error) return 'error'
+  if (outcome.kind === 'rows') return `${outcome.result?.rows.length ?? 0} row(s)`
+  if (outcome.kind === 'rows-modified') return `${outcome.rowsModified} row(s) affected`
+  return 'done'
 }

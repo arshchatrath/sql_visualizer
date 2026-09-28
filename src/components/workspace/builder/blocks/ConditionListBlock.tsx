@@ -1,4 +1,3 @@
-import type { ColumnOption } from '../../../../lib/query/columns'
 import type { ComparisonOperator, Condition } from '../../../../lib/query/types'
 
 const OPERATORS: ComparisonOperator[] = ['=', '!=', '>', '>=', '<', '<=', 'LIKE']
@@ -9,7 +8,7 @@ interface ConditionListBlockProps {
   /** 'warn' flags the empty state as something to notice (e.g. an UPDATE/DELETE with no filter) rather than a routine default. */
   emptyHintTone?: 'muted' | 'warn'
   conditions: Condition[]
-  columns: ColumnOption[]
+  columns: string[]
   onAdd: () => void
   onUpdate: (id: string, patch: Partial<Condition>) => void
   onRemove: (id: string) => void
@@ -66,8 +65,8 @@ export function ConditionListBlock({
               column…
             </option>
             {columns.map((col) => (
-              <option key={col.value} value={col.value}>
-                {col.label}
+              <option key={col} value={col}>
+                {col}
               </option>
             ))}
           </select>

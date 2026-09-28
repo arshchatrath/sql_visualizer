@@ -1,10 +1,10 @@
 import { create } from 'zustand'
 import type { Database } from 'sql.js'
-import { loadSqlJs, type ExecOutcome } from '../lib/db/engine'
+import { loadSqlJs, summarizeOutcome, type ExecOutcome } from '../lib/db/engine'
 import { createSeededDatabase } from '../lib/db/seed'
 import { introspectSchema, type TableSchema } from '../lib/db/schema'
 import { explainQueryPlan, type TraceStage } from '../lib/db/explainPlan'
-import { runStatementWithRowCapture, type MutationCaptureSpec, type RowChangeSet } from '../lib/db/rowChanges'
+import { runStatementWithRowCapture, type RowChangeSet } from '../lib/db/rowChanges'
 import { generateQuery, buildConditionClause } from '../lib/query/builder'
 import {
   createDefaultBuilderState,
@@ -20,13 +20,11 @@ import {
   type SqlColumnType,
 } from '../lib/query/types'
 
-export type EngineStatus = 'loading' | 'ready' | 'error'
-
 interface DbStoreState {
   // --- database engine ---
   db: Database | null
   schema: TableSchema[]
-  status: EngineStatus
+  status: 'loading' | 'ready' | 'error'
   initError: string | null
   lastTrace: TraceStage[]
   lastOutcome: ExecOutcome | null
@@ -36,7 +34,7 @@ interface DbStoreState {
   lastExecutionId: number
   history: HistoryEntry[]
   init: () => Promise<void>
-  runQuery: (sql: string) => void
+  execute: () => void
   restoreHistoryEntry: (id: string) => void
 
   // --- query builder ---
@@ -70,280 +68,162 @@ interface DbStoreState {
   setAlterAddColumn: (val: { name: string; type: SqlColumnType }) => void
   setAlterRenameColumn: (val: { from: string; to: string }) => void
   setDropConfirmed: (confirmed: boolean) => void
-  execute: () => void
 }
 
 // Guards against a duplicate seeded database being created if init() is
 // invoked twice (e.g. React StrictMode's double-invoked effects in dev).
 let initStarted = false
 
+const HISTORY_LIMIT = 25
+
 function newCondition(): Condition {
   return { id: nextClauseId('cond'), column: '', operator: '=', value: '', connector: 'AND' }
 }
 
-const HISTORY_LIMIT = 25
+export const useDbStore = create<DbStoreState>((set, get) => {
+  /** Every builder change goes through here, so the generated SQL and clause chain always match it. */
+  const setBuilder = (builder: BuilderState) => {
+    const { sql, chain } = generateQuery(builder, get().schema)
+    set({ builder, generatedSql: sql, activeChain: chain })
+  }
+  const updateBuilder = (change: (b: BuilderState) => Partial<BuilderState>) => {
+    const { builder } = get()
+    setBuilder({ ...builder, ...change(builder) })
+  }
+  /** Mode/scope/table switches start the blocks over, keeping only what's passed in. */
+  const resetBuilder = (keep: Partial<BuilderState>) => setBuilder({ ...createDefaultBuilderState(), ...keep })
 
-function summarizeOutcome(outcome: ExecOutcome): string {
-  if (outcome.error) return 'error'
-  if (outcome.kind === 'rows') return `${outcome.result?.rows.length ?? 0} row(s)`
-  if (outcome.kind === 'rows-modified') return `${outcome.rowsModified} row(s) affected`
-  return 'done'
-}
+  return {
+    db: null,
+    schema: [],
+    status: 'loading',
+    initError: null,
+    lastTrace: [],
+    lastOutcome: null,
+    lastRowChanges: null,
+    lastSql: null,
+    lastExecutionId: 0,
+    history: [],
 
-/** Recomputes generatedSql/activeChain from the current builder + schema. */
-function withRegeneratedQuery(
-  builder: BuilderState,
-  schema: TableSchema[],
-): Pick<DbStoreState, 'builder' | 'generatedSql' | 'activeChain'> {
-  const { sql, chain } = generateQuery(builder, schema)
-  return { builder, generatedSql: sql, activeChain: chain }
-}
+    builder: createDefaultBuilderState(),
+    generatedSql: '',
+    activeChain: [],
 
-export const useDbStore = create<DbStoreState>((set, get) => ({
-  db: null,
-  schema: [],
-  status: 'loading',
-  initError: null,
-  lastTrace: [],
-  lastOutcome: null,
-  lastRowChanges: null,
-  lastSql: null,
-  lastExecutionId: 0,
-  history: [],
-
-  builder: createDefaultBuilderState(),
-  generatedSql: '',
-  activeChain: [],
-
-  init: async () => {
-    if (initStarted) return
-    initStarted = true
-    try {
-      const SQL = await loadSqlJs()
-      const db = createSeededDatabase(SQL)
-      const schema = introspectSchema(db)
-      set({ db, schema, status: 'ready', ...withRegeneratedQuery(get().builder, schema) })
-    } catch (err) {
-      set({ status: 'error', initError: err instanceof Error ? err.message : String(err) })
-    }
-  },
-
-  runQuery: (sql: string) => {
-    const { db, builder, activeChain, history, schema } = get()
-    if (!db) return
-    const trace = explainQueryPlan(db, sql)
-
-    // Only a TABLE-scope CREATE/UPDATE/DELETE gets row-level capture — a
-    // SELECT already returns its own rows, and a DATABASE-scope statement
-    // here is DDL (CREATE/ALTER/DROP TABLE), which has no "rows" to speak of.
-    const isTableMutation = builder.scope === 'TABLE' && !!builder.table && builder.mode !== 'READ'
-    const capture: MutationCaptureSpec | null = isTableMutation
-      ? {
-          table: builder.table!,
-          mode: builder.mode as 'CREATE' | 'UPDATE' | 'DELETE',
-          whereSql: buildConditionClause(builder.where, schema, builder.table!),
-        }
-      : null
-
-    const { outcome, rowChanges } = runStatementWithRowCapture(db, sql, capture)
-    const nextSchema = introspectSchema(db)
-
-    const entry: HistoryEntry = {
-      id: nextClauseId('hist'),
-      sql,
-      chain: activeChain,
-      builderSnapshot: { ...builder },
-      timestamp: Date.now(),
-      elapsedMs: outcome.elapsedMs,
-      summary: summarizeOutcome(outcome),
-    }
-
-    set((state) => ({
-      lastTrace: trace,
-      lastOutcome: outcome,
-      lastRowChanges: rowChanges,
-      lastSql: sql,
-      schema: nextSchema,
-      lastExecutionId: state.lastExecutionId + 1,
-      history: [entry, ...history].slice(0, HISTORY_LIMIT),
-    }))
-  },
-
-  restoreHistoryEntry: (id) => {
-    const { history, schema } = get()
-    const entry = history.find((h) => h.id === id)
-    if (!entry) return
-    set(withRegeneratedQuery({ ...entry.builderSnapshot }, schema))
-  },
-
-  setMode: (mode) => {
-    const { schema, builder } = get()
-    const next: BuilderState = { ...createDefaultBuilderState(), mode, table: builder.table }
-    set(withRegeneratedQuery(next, schema))
-  },
-
-  setScope: (scope) => {
-    const { schema, builder } = get()
-    const next: BuilderState = { ...createDefaultBuilderState(), mode: builder.mode, scope, table: builder.table }
-    set(withRegeneratedQuery(next, schema))
-  },
-
-  setTable: (table) => {
-    const { schema, builder } = get()
-    const next: BuilderState = { ...createDefaultBuilderState(), mode: builder.mode, scope: builder.scope, table }
-    set(withRegeneratedQuery(next, schema))
-  },
-
-  setJoinTable: (table) => {
-    const { schema, builder } = get()
-    const next = { ...builder, join: { table, leftColumn: null, rightColumn: null } }
-    set(withRegeneratedQuery(next, schema))
-  },
-
-  setJoinColumns: (leftColumn, rightColumn) => {
-    const { schema, builder } = get()
-    const next = { ...builder, join: { ...builder.join, leftColumn, rightColumn } }
-    set(withRegeneratedQuery(next, schema))
-  },
-
-  addWhereCondition: () => {
-    const { schema, builder } = get()
-    const next = { ...builder, where: [...builder.where, newCondition()] }
-    set(withRegeneratedQuery(next, schema))
-  },
-  updateWhereCondition: (id, patch) => {
-    const { schema, builder } = get()
-    const next = { ...builder, where: builder.where.map((c) => (c.id === id ? { ...c, ...patch } : c)) }
-    set(withRegeneratedQuery(next, schema))
-  },
-  removeWhereCondition: (id) => {
-    const { schema, builder } = get()
-    const next = { ...builder, where: builder.where.filter((c) => c.id !== id) }
-    set(withRegeneratedQuery(next, schema))
-  },
-
-  addHavingCondition: () => {
-    const { schema, builder } = get()
-    const next = { ...builder, having: [...builder.having, newCondition()] }
-    set(withRegeneratedQuery(next, schema))
-  },
-  updateHavingCondition: (id, patch) => {
-    const { schema, builder } = get()
-    const next = { ...builder, having: builder.having.map((c) => (c.id === id ? { ...c, ...patch } : c)) }
-    set(withRegeneratedQuery(next, schema))
-  },
-  removeHavingCondition: (id) => {
-    const { schema, builder } = get()
-    const next = { ...builder, having: builder.having.filter((c) => c.id !== id) }
-    set(withRegeneratedQuery(next, schema))
-  },
-
-  toggleGroupByColumn: (column) => {
-    const { schema, builder } = get()
-    const has = builder.groupBy.includes(column)
-    const groupBy = has ? builder.groupBy.filter((c) => c !== column) : [...builder.groupBy, column]
-    const groupByAggregate = groupBy.length === 0 ? null : builder.groupByAggregate
-    set(withRegeneratedQuery({ ...builder, groupBy, groupByAggregate }, schema))
-  },
-  setGroupByAggregate: (agg) => {
-    const { schema, builder } = get()
-    set(withRegeneratedQuery({ ...builder, groupByAggregate: agg }, schema))
-  },
-
-  addOrderBy: () => {
-    const { schema, builder } = get()
-    const next = {
-      ...builder,
-      orderBy: [...builder.orderBy, { id: nextClauseId('order'), column: '', direction: 'ASC' as const }],
-    }
-    set(withRegeneratedQuery(next, schema))
-  },
-  updateOrderBy: (id, patch) => {
-    const { schema, builder } = get()
-    const next = { ...builder, orderBy: builder.orderBy.map((o) => (o.id === id ? { ...o, ...patch } : o)) }
-    set(withRegeneratedQuery(next, schema))
-  },
-  removeOrderBy: (id) => {
-    const { schema, builder } = get()
-    const next = { ...builder, orderBy: builder.orderBy.filter((o) => o.id !== id) }
-    set(withRegeneratedQuery(next, schema))
-  },
-
-  setLimit: (limit) => {
-    const { schema, builder } = get()
-    set(withRegeneratedQuery({ ...builder, limit }, schema))
-  },
-
-  setInsertValue: (column, value) => {
-    const { schema, builder } = get()
-    const next = { ...builder, insertValues: { ...builder.insertValues, [column]: value } }
-    set(withRegeneratedQuery(next, schema))
-  },
-  setSetValue: (column, value) => {
-    const { schema, builder } = get()
-    const next = { ...builder, setValues: { ...builder.setValues, [column]: value } }
-    set(withRegeneratedQuery(next, schema))
-  },
-
-  setNewTableName: (name) => {
-    const { schema, builder } = get()
-    set(withRegeneratedQuery({ ...builder, newTableName: name }, schema))
-  },
-  addNewTableColumn: () => {
-    const { schema, builder } = get()
-    const col: DdlColumnDef = {
-      id: nextClauseId('ddlcol'),
-      name: '',
-      type: 'TEXT',
-      primaryKey: false,
-      notNull: false,
-    }
-    set(withRegeneratedQuery({ ...builder, newTableColumns: [...builder.newTableColumns, col] }, schema))
-  },
-  updateNewTableColumn: (id, patch) => {
-    const { schema, builder } = get()
-    const next = {
-      ...builder,
-      newTableColumns: builder.newTableColumns.map((c) => (c.id === id ? { ...c, ...patch } : c)),
-    }
-    set(withRegeneratedQuery(next, schema))
-  },
-  removeNewTableColumn: (id) => {
-    const { schema, builder } = get()
-    const next = { ...builder, newTableColumns: builder.newTableColumns.filter((c) => c.id !== id) }
-    set(withRegeneratedQuery(next, schema))
-  },
-
-  setAlterAction: (action) => {
-    const { schema, builder } = get()
-    set(withRegeneratedQuery({ ...builder, alterAction: action }, schema))
-  },
-  setAlterAddColumn: (val) => {
-    const { schema, builder } = get()
-    set(withRegeneratedQuery({ ...builder, alterAddColumn: val }, schema))
-  },
-  setAlterRenameColumn: (val) => {
-    const { schema, builder } = get()
-    set(withRegeneratedQuery({ ...builder, alterRenameColumn: val }, schema))
-  },
-  setDropConfirmed: (confirmed) => {
-    const { schema, builder } = get()
-    set(withRegeneratedQuery({ ...builder, dropConfirmed: confirmed }, schema))
-  },
-
-  execute: () => {
-    const { generatedSql, runQuery, builder } = get()
-    if (!generatedSql) return
-    const isDdl = builder.scope === 'DATABASE' && builder.mode !== 'READ'
-    runQuery(generatedSql)
-    if (isDdl) {
-      const outcome = get().lastOutcome
-      if (outcome && !outcome.error) {
-        const latestSchema = get().schema
-        const nextTable = builder.mode === 'CREATE' ? builder.newTableName.trim() || null : null
-        const next: BuilderState = { ...createDefaultBuilderState(), table: nextTable }
-        set(withRegeneratedQuery(next, latestSchema))
+    init: async () => {
+      if (initStarted) return
+      initStarted = true
+      try {
+        const db = createSeededDatabase(await loadSqlJs())
+        set({ db, schema: introspectSchema(db), status: 'ready' })
+      } catch (err) {
+        set({ status: 'error', initError: err instanceof Error ? err.message : String(err) })
       }
-    }
-  },
-}))
+    },
+
+    execute: () => {
+      const { db, builder, generatedSql: sql, activeChain, schema } = get()
+      if (!db || !sql) return
+      const trace = explainQueryPlan(db, sql)
+
+      // Only a TABLE-scope CREATE/UPDATE/DELETE gets row-level capture — a
+      // SELECT already returns its own rows, and a DATABASE-scope statement
+      // here is DDL (CREATE/ALTER/DROP TABLE), which has no "rows" to speak of.
+      const { scope, table, mode } = builder
+      const capture =
+        scope === 'TABLE' && table && mode !== 'READ'
+          ? { table, mode, whereSql: buildConditionClause(builder.where, schema, table) }
+          : null
+
+      const { outcome, rowChanges } = runStatementWithRowCapture(db, sql, capture)
+
+      const entry: HistoryEntry = {
+        id: nextClauseId('hist'),
+        sql,
+        chain: activeChain,
+        builderSnapshot: builder,
+        timestamp: Date.now(),
+        elapsedMs: outcome.elapsedMs,
+        summary: summarizeOutcome(outcome),
+      }
+
+      set((state) => ({
+        lastTrace: trace,
+        lastOutcome: outcome,
+        lastRowChanges: rowChanges,
+        lastSql: sql,
+        schema: introspectSchema(db),
+        lastExecutionId: state.lastExecutionId + 1,
+        history: [entry, ...state.history].slice(0, HISTORY_LIMIT),
+      }))
+
+      // DDL changes the schema out from under the builder, so start it over —
+      // pointed at the new table after a CREATE TABLE.
+      const isDdl = scope === 'DATABASE' && mode !== 'READ'
+      if (isDdl && !outcome.error) {
+        resetBuilder({ table: mode === 'CREATE' ? builder.newTableName.trim() || null : null })
+      }
+    },
+
+    restoreHistoryEntry: (id) => {
+      const entry = get().history.find((h) => h.id === id)
+      if (entry) setBuilder(entry.builderSnapshot)
+    },
+
+    setMode: (mode) => resetBuilder({ mode, table: get().builder.table }),
+    setScope: (scope) => resetBuilder({ mode: get().builder.mode, scope, table: get().builder.table }),
+    setTable: (table) => resetBuilder({ mode: get().builder.mode, scope: get().builder.scope, table }),
+
+    setJoinTable: (table) => updateBuilder(() => ({ join: { table, leftColumn: null, rightColumn: null } })),
+    setJoinColumns: (leftColumn, rightColumn) =>
+      updateBuilder((b) => ({ join: { ...b.join, leftColumn, rightColumn } })),
+
+    addWhereCondition: () => updateBuilder((b) => ({ where: [...b.where, newCondition()] })),
+    updateWhereCondition: (id, patch) =>
+      updateBuilder((b) => ({ where: b.where.map((c) => (c.id === id ? { ...c, ...patch } : c)) })),
+    removeWhereCondition: (id) => updateBuilder((b) => ({ where: b.where.filter((c) => c.id !== id) })),
+
+    addHavingCondition: () => updateBuilder((b) => ({ having: [...b.having, newCondition()] })),
+    updateHavingCondition: (id, patch) =>
+      updateBuilder((b) => ({ having: b.having.map((c) => (c.id === id ? { ...c, ...patch } : c)) })),
+    removeHavingCondition: (id) => updateBuilder((b) => ({ having: b.having.filter((c) => c.id !== id) })),
+
+    toggleGroupByColumn: (column) =>
+      updateBuilder((b) => {
+        const groupBy = b.groupBy.includes(column) ? b.groupBy.filter((c) => c !== column) : [...b.groupBy, column]
+        return { groupBy, groupByAggregate: groupBy.length === 0 ? null : b.groupByAggregate }
+      }),
+    setGroupByAggregate: (groupByAggregate) => updateBuilder(() => ({ groupByAggregate })),
+
+    addOrderBy: () =>
+      updateBuilder((b) => ({ orderBy: [...b.orderBy, { id: nextClauseId('order'), column: '', direction: 'ASC' }] })),
+    updateOrderBy: (id, patch) =>
+      updateBuilder((b) => ({ orderBy: b.orderBy.map((o) => (o.id === id ? { ...o, ...patch } : o)) })),
+    removeOrderBy: (id) => updateBuilder((b) => ({ orderBy: b.orderBy.filter((o) => o.id !== id) })),
+
+    setLimit: (limit) => updateBuilder(() => ({ limit })),
+
+    setInsertValue: (column, value) =>
+      updateBuilder((b) => ({ insertValues: { ...b.insertValues, [column]: value } })),
+    setSetValue: (column, value) => updateBuilder((b) => ({ setValues: { ...b.setValues, [column]: value } })),
+
+    setNewTableName: (newTableName) => updateBuilder(() => ({ newTableName })),
+    addNewTableColumn: () =>
+      updateBuilder((b) => ({
+        newTableColumns: [
+          ...b.newTableColumns,
+          { id: nextClauseId('ddlcol'), name: '', type: 'TEXT', primaryKey: false, notNull: false },
+        ],
+      })),
+    updateNewTableColumn: (id, patch) =>
+      updateBuilder((b) => ({
+        newTableColumns: b.newTableColumns.map((c) => (c.id === id ? { ...c, ...patch } : c)),
+      })),
+    removeNewTableColumn: (id) =>
+      updateBuilder((b) => ({ newTableColumns: b.newTableColumns.filter((c) => c.id !== id) })),
+
+    setAlterAction: (alterAction) => updateBuilder(() => ({ alterAction })),
+    setAlterAddColumn: (alterAddColumn) => updateBuilder(() => ({ alterAddColumn })),
+    setAlterRenameColumn: (alterRenameColumn) => updateBuilder(() => ({ alterRenameColumn })),
+    setDropConfirmed: (dropConfirmed) => updateBuilder(() => ({ dropConfirmed })),
+  }
+})

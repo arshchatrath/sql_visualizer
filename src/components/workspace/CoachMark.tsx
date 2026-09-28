@@ -62,7 +62,7 @@ function measure(targetSelector: string): Placement | null {
  * being pointed at must remain clickable, which is the whole point.
  */
 export function CoachMark({ targetSelector, label, onDismiss }: CoachMarkProps) {
-  const [placement, setPlacement] = useState<Placement | null>(() => null)
+  const [placement, setPlacement] = useState<Placement | null>(null)
   const boxRef = useRef<HTMLDivElement>(null)
 
   // Measure after paint (the panel grid must have laid out first), then keep
@@ -118,31 +118,22 @@ export function CoachMark({ targetSelector, label, onDismiss }: CoachMarkProps) 
 
   if (!placement) return null
 
+  // Above the box pointing up, or below it pointing down when flipped.
   return (
     <div
       ref={boxRef}
-      data-testid="coach-mark"
       aria-hidden="true"
-      className="pointer-events-none fixed z-50 opacity-0"
+      className={`pointer-events-none fixed z-50 flex opacity-0 ${placement.flipped ? 'flex-col-reverse' : 'flex-col'}`}
       style={{ left: placement.left, top: placement.top, width: BOX_WIDTH }}
     >
-      {!placement.flipped && (
-        <div className="text-[11px] leading-none text-accent">
-          <span data-testid="coach-arrow" className="inline-block" style={{ marginLeft: placement.arrowOffset - 4 }}>
-            ▲
-          </span>
-        </div>
-      )}
+      <div className="text-[11px] leading-none text-accent">
+        <span className="inline-block" style={{ marginLeft: placement.arrowOffset - 4 }}>
+          {placement.flipped ? '▼' : '▲'}
+        </span>
+      </div>
       <div className="my-1 border border-accent bg-panel-2 px-2.5 py-1.5 text-[11px] text-accent shadow-[0_0_18px_rgb(255_176_32_/_18%)]">
         {label}
       </div>
-      {placement.flipped && (
-        <div className="text-[11px] leading-none text-accent">
-          <span data-testid="coach-arrow" className="inline-block" style={{ marginLeft: placement.arrowOffset - 4 }}>
-            ▼
-          </span>
-        </div>
-      )}
     </div>
   )
 }

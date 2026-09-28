@@ -1,24 +1,14 @@
 import { Fragment, useEffect, useRef } from 'react'
 import gsap from 'gsap'
-import { formatCellValue, computeColumnWidths, borderLine } from '../../../lib/ascii/tableLayout'
+import type { RowChangeRow, RowChangeSet } from '../../../lib/db/rowChanges'
 import { addScrambleTween } from '../../../lib/animation/scramble'
 import { loadSfx } from '../../../lib/sound/loadSfx'
 import { traceRevealDurationMs, RESULTS_FOLLOW_DELAY_MS } from '../../../lib/trace/timing'
 
-export type RowKind = 'select' | 'insert' | 'update' | 'delete'
-
-export interface DisplayRow {
-  key: string | number
-  before: unknown[] | null
-  after: unknown[] | null
-  /** False for a row shown only to give the change context — it renders, but performs no effect. */
-  affected: boolean
-}
-
 interface RowAnimatedTableProps {
-  kind: RowKind
+  kind: RowChangeSet['kind'] | 'select'
   columns: string[]
-  rows: DisplayRow[]
+  rows: RowChangeRow[]
   /** Trace stage count for the execution these rows belong to — used only to time this animation's start against the trace panel's own staged reveal (see ResultsPanel), so the row choreography doesn't finish before its container has even faded in. */
   traceStageCount: number
 }
@@ -26,10 +16,8 @@ interface RowAnimatedTableProps {
 /*
  * Pacing, in seconds, kept together so the whole sequence can be tuned as one
  * thing rather than by hunting numbers through the choreography below.
- *
- * These are deliberately unhurried: the point of the kill / upgrade / spawn
- * effects is to be *watched*, and at the previous tempo each row was over
- * before the eye could land on it.
+ * Deliberately unhurried: the kill / upgrade / spawn effects are meant to be
+ * *watched*.
  */
 const T = {
   /** Push-in on the table as its rows arrive. */
@@ -46,13 +34,18 @@ const T = {
   delete: { flash: 0.14, shake: 0.3, strike: 0.24, strikeAt: 0.1, collapse: 0.5, collapseAt: 0.5 },
 } as const
 
-function computeWidths(columns: string[], rows: DisplayRow[]): number[] {
-  const candidateRows: string[][] = []
-  rows.forEach((r) => {
-    if (r.before) candidateRows.push(r.before.map(formatCellValue))
-    if (r.after) candidateRows.push(r.after.map(formatCellValue))
-  })
-  return computeColumnWidths(columns, candidateRows)
+function formatCellValue(value: unknown): string {
+  return value === null || value === undefined ? 'NULL' : String(value)
+}
+
+function borderLine(widths: number[], left: string, mid: string, right: string): string {
+  return left + widths.map((w) => '─'.repeat(w + 2)).join(mid) + right
+}
+
+/** Each column is as wide as the widest value it shows at any point — before or after the change. */
+function computeWidths(columns: string[], rows: RowChangeRow[]): number[] {
+  const values = rows.flatMap((r) => [r.before, r.after]).filter((v) => v !== null)
+  return columns.map((col, i) => Math.max(col.length, ...values.map((v) => formatCellValue(v[i]).length), 1))
 }
 
 /**
@@ -79,12 +72,10 @@ export function RowAnimatedTable({ kind, columns, rows, traceStageCount }: RowAn
     if (rows.length === 0) return
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     // Cap the cascade's total span: a deliberate 0.17s between rows reads
-    // beautifully on a handful of rows, but on a large result set it would
-    // turn into a minute-long crawl, so the gap tightens as rows grow.
-    // Time the cascade off the rows that actually animate. On an UPDATE or
-    // DELETE the context rows are already sitting there untouched, so pacing
-    // against the full table would leave a long dead pause before anything
-    // happened whenever the hit rows sat near the bottom.
+    // well on a handful of rows, but on a large result set it would turn into
+    // a minute-long crawl, so the gap tightens as rows grow. Only rows that
+    // actually animate count — on an UPDATE or DELETE the context rows are
+    // already sitting there untouched.
     const animatingCount = entering ? rows.length : rows.filter((r) => r.affected).length
     const rowStagger = reducedMotion
       ? 0
@@ -241,7 +232,7 @@ export function RowAnimatedTable({ kind, columns, rows, traceStageCount }: RowAn
   const headerCells = columns.map((c, j) => c.padEnd(widths[j])).join(' │ ')
 
   return (
-    <div ref={tableRef} className="overflow-auto text-[11px] leading-relaxed text-accent2" data-testid="results-table">
+    <div ref={tableRef} className="overflow-auto text-[11px] leading-relaxed text-accent2">
       <div className="whitespace-pre">{borderLine(widths, '┌', '┬', '┐')}</div>
       <div className="whitespace-pre">{`│ ${headerCells} │`}</div>
       <div className="whitespace-pre">{borderLine(widths, '├', '┼', '┤')}</div>
@@ -249,7 +240,7 @@ export function RowAnimatedTable({ kind, columns, rows, traceStageCount }: RowAn
         const source = kind === 'update' || kind === 'delete' ? row.before : row.after
         return (
           <div
-            key={row.key}
+            key={row.rowid}
             ref={(el) => {
               rowRefs.current[i] = el
             }}

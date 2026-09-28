@@ -8,9 +8,9 @@ export function SetBlock() {
   const table = schema.find((t) => t.name === builder.table)
   if (!table) return null
 
-  // Editing the primary key of an existing row makes for a confusing demo
-  // (SQLite would happily do it, but it stops rowQuery/history from
-  // referring to "the same row" in an obvious way) — leave it out of SET.
+  // Left out of SET: SQLite allows changing an INTEGER PRIMARY KEY, but that
+  // key *is* the rowid, which is how the results panel matches each row's
+  // before and after values.
   const editableColumns = table.columns.filter((c) => !c.primaryKey)
 
   return (

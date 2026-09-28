@@ -5,7 +5,7 @@ export function DropTableDdlBlock() {
   const setDropConfirmed = useDbStore((s) => s.setDropConfirmed)
 
   return (
-    <div className="space-y-2" data-testid="drop-table-ddl-block">
+    <div className="space-y-2">
       <span className="text-xs tracking-wide text-accent">DROP TABLE</span>
       <p className="text-xs text-muted">
         this permanently deletes <span className="text-text">{builder.table}</span> and all of its rows for the
@@ -17,7 +17,6 @@ export function DropTableDdlBlock() {
           checked={builder.dropConfirmed}
           onChange={(e) => setDropConfirmed(e.target.checked)}
           data-focusable
-          data-testid="drop-confirm-checkbox"
         />
         yes, drop {builder.table}
       </label>

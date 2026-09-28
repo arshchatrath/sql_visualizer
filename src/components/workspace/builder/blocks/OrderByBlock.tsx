@@ -32,8 +32,8 @@ export function OrderByBlock() {
               column…
             </option>
             {columns.map((col) => (
-              <option key={col.value} value={col.value}>
-                {col.label}
+              <option key={col} value={col}>
+                {col}
               </option>
             ))}
           </select>

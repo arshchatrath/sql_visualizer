@@ -9,7 +9,7 @@ export function QueryChain() {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5" data-testid="query-chain">
+    <div className="flex flex-wrap items-center gap-1.5">
       {chain.map((step, i) => (
         <span key={`${step}-${i}`} className="flex items-center gap-1.5">
           {i > 0 && <span className="text-border">→</span>}

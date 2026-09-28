@@ -38,7 +38,7 @@ export function ResultsPanel() {
   }
 
   return (
-    <div ref={containerRef} className="space-y-2" data-testid="results-panel">
+    <div ref={containerRef} className="space-y-2">
       <ResultsTable />
       <ResultsMeta />
     </div>

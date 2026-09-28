@@ -16,15 +16,15 @@ export function GroupByBlock() {
       <span className="text-xs tracking-wide text-accent">GROUP BY</span>
       <div className="flex flex-wrap gap-x-3 gap-y-1.5">
         {columns.map((col) => (
-          <label key={col.value} className="flex items-center gap-1.5 text-xs text-muted">
+          <label key={col} className="flex items-center gap-1.5 text-xs text-muted">
             <input
               type="checkbox"
-              checked={builder.groupBy.includes(col.value)}
-              onChange={() => toggleGroupByColumn(col.value)}
+              checked={builder.groupBy.includes(col)}
+              onChange={() => toggleGroupByColumn(col)}
               data-focusable
               className="accent-accent2"
             />
-            {col.label}
+            {col}
           </label>
         ))}
       </div>
@@ -44,8 +44,8 @@ export function GroupByBlock() {
               // real column, so switching to one of those drops a '*'
               // selection back to an actual column instead of offering it.
               const current = builder.groupByAggregate?.column
-              const keepCurrent = current && (fn === 'COUNT' || current !== '*')
-              const column = keepCurrent ? current! : fn === 'COUNT' ? '*' : (columns[0]?.value ?? '')
+              const column =
+                current && (fn === 'COUNT' || current !== '*') ? current : fn === 'COUNT' ? '*' : (columns[0] ?? '')
               setGroupByAggregate({ fn, column })
             }}
             data-focusable
@@ -67,8 +67,8 @@ export function GroupByBlock() {
             >
               {builder.groupByAggregate.fn === 'COUNT' && <option value="*">* (all rows)</option>}
               {columns.map((col) => (
-                <option key={col.value} value={col.value}>
-                  {col.label}
+                <option key={col} value={col}>
+                  {col}
                 </option>
               ))}
             </select>

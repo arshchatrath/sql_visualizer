@@ -14,11 +14,7 @@ function App() {
   return (
     <>
       {contentPhase === 'landing' ? <Landing onStart={handleStart} /> : <WorkspaceLayout />}
-      <TransitionOverlay
-        playToken={playToken}
-        onMidpoint={() => setContentPhase('workspace')}
-        onComplete={() => {}}
-      />
+      <TransitionOverlay playToken={playToken} onMidpoint={() => setContentPhase('workspace')} />
     </>
   )
 }

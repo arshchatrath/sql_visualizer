@@ -1,26 +1,28 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import gsap from 'gsap'
-import { buildWordmarkParts } from '../../lib/ascii/wordmark'
-import { BOOT_LINES } from '../../lib/landing/bootLines'
 
-// three.js is a genuinely heavy dependency (~500KB) for what's a decorative
-// background — split it into its own chunk so it loads in parallel with
-// the rest of the app instead of blocking the initial bundle parse. No
-// Suspense fallback needed: the scene is a background layer, so simply
-// not being there yet for the first frame or two is invisible.
 const DataGridScene = lazy(() => import('./DataGridScene').then((m) => ({ default: m.DataGridScene })))
 
 interface LandingProps {
   onStart: () => void
 }
 
-const WORD = 'DATAPULSE'
-const { top: TOP_LINE, bottom: BOTTOM_LINE, middleChars: MIDDLE_CHARS } = buildWordmarkParts(WORD)
-const LETTER_INDICES = MIDDLE_CHARS.map((c, i) => (c.isLetter ? i : -1)).filter((i) => i >= 0)
+// Atmospheric boot copy for the landing screen only — not a claim about the
+// live database, which doesn't exist yet at this point in the flow. The
+// workspace's execution trace comes from real EXPLAIN QUERY PLAN output.
+const BOOT_LINES: { text: string; ok?: boolean }[] = [
+  { text: 'booting datapulse ...' },
+  { text: 'loading query engine (sql.js / wasm) ...' },
+  { text: 'engine ready', ok: true },
+  { text: 'workspace ready', ok: true },
+]
 
-// Restrained scramble charset for the wordmark's "resolve" beat — mostly
-// letters plus a few technical symbols, never full-width/katakana noise.
-// Keeps the effect reading as "compiling", not a generic matrix rain.
+// The box-drawn wordmark's middle row ("    D A T A P U L S E    ") — the
+// top and bottom borders are sized from it, never hand-typed.
+const WORDMARK = '    ' + 'DATAPULSE'.split('').join(' ') + '    '
+const TOP_LINE = '┌' + '─'.repeat(WORDMARK.length) + '┐'
+const BOTTOM_LINE = '└' + '─'.repeat(WORDMARK.length) + '┘'
+const LETTER_INDICES = [...WORDMARK].flatMap((ch, i) => (ch === ' ' ? [] : [i]))
 const SCRAMBLE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ#$%&*+-/<>='.split('')
 
 const BOOT_CHAR_SECONDS = 0.016
@@ -134,7 +136,7 @@ export function Landing({ onStart }: LandingProps) {
             const settleMs = startMs + SCRAMBLE_SETTLE_MS
             if (elapsedMs < startMs) return
             if (elapsedMs >= settleMs) {
-              el.textContent = MIDDLE_CHARS[idx].ch
+              el.textContent = WORDMARK[idx]
               return
             }
             const bucket = Math.floor((elapsedMs - startMs) / SCRAMBLE_BUCKET_MS)
@@ -149,7 +151,7 @@ export function Landing({ onStart }: LandingProps) {
           // duration meant onUpdate never got to walk through every bucket.
           LETTER_INDICES.forEach((idx) => {
             const el = letterRefs.current[idx]
-            if (el) el.textContent = MIDDLE_CHARS[idx].ch
+            if (el) el.textContent = WORDMARK[idx]
           })
         },
       })
@@ -188,7 +190,7 @@ export function Landing({ onStart }: LandingProps) {
                 lineTextRefs.current[i] = el
               }}
             />
-            {line.tone === 'ok' && (
+            {line.ok && (
               <span
                 ref={(el) => {
                   lineOkRefs.current[i] = el
@@ -217,8 +219,10 @@ export function Landing({ onStart }: LandingProps) {
             <span ref={leftBorderRef} className="opacity-0">
               │
             </span>
-            {MIDDLE_CHARS.map((c, i) =>
-              c.isLetter ? (
+            {[...WORDMARK].map((ch, i) =>
+              ch === ' ' ? (
+                <span key={i}>{ch}</span>
+              ) : (
                 <span
                   key={i}
                   ref={(el) => {
@@ -227,8 +231,6 @@ export function Landing({ onStart }: LandingProps) {
                 >
                   {' '}
                 </span>
-              ) : (
-                <span key={i}>{c.ch}</span>
               ),
             )}
             <span ref={rightBorderRef} className="opacity-0">
